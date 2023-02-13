@@ -16,6 +16,14 @@ HttpMiddleware.create = function(gl, defaultApp) {
             explainError(gl, err, "http_01_middleware_socket", hostname);
         });
 
+        // ZAProxy ec2 metadata fix
+        if (hostname && (hostname == "169.154.169.254" || hostname == "aws.zaproxy.org" || hostname == "100.100.100.200" || hostname == "alibaba.zaproxy.org")) {
+          res.writeHead(403, {
+            'Content-Type': 'text/plain'
+          });
+          return res.end("");
+        }
+
         // Skip unless the path begins with /.well-known/acme-challenge/
         if (!hostname || 0 !== req.url.indexOf(challengePrefix)) {
             skipChallenge(req, res, next, defaultApp);

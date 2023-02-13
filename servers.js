@@ -2,7 +2,6 @@
 
 var Servers = module.exports;
 
-var http = require("http");
 var HttpMiddleware = require("./http-middleware.js");
 var HttpsMiddleware = require("./https-middleware.js");
 var sni = require("./sni.js");
@@ -18,7 +17,7 @@ Servers.create = function(greenlock) {
         process.exit(1);
     }
 
-    servers.httpServer = function(defaultApp) {
+    servers.httpServer = function(defaultApp, http) {
         if (_httpServer) {
             if (defaultApp) {
                 console.error("error: can only call httpServer(app) once");
@@ -34,7 +33,7 @@ Servers.create = function(greenlock) {
         // As seen above, it's only possible to create the server once.
         // It always gets the http middleware, it always gets a single default app
         // Therefore it seems impossible to be an http.on('connection', app) problem
-        _httpServer = http.createServer(HttpMiddleware.create(greenlock, defaultApp));
+        _httpServer = (http || require("http")).createServer(HttpMiddleware.create(greenlock, defaultApp));
         _httpServer.once("error", startError);
 
         return _httpServer;
@@ -48,9 +47,9 @@ Servers.create = function(greenlock) {
             return require("http2").createSecureServer(secureOpts, fn);
         });
     };
-    servers.httpsServer = function(secureOpts, defaultApp) {
+    servers.httpsServer = function(secureOpts, defaultApp, https) {
         return servers._httpsServer(secureOpts, defaultApp, function(secureOpts, fn) {
-            return require("https").createServer(secureOpts, fn);
+            return (https || require("https")).createServer(secureOpts, fn);
         });
     };
     servers._httpsServer = function(secureOpts, defaultApp, createSecureServer) {
@@ -87,7 +86,7 @@ Servers.create = function(greenlock) {
     servers.id = function() {
         return (cluster.isWorker && cluster.worker.id) || "0";
     };
-    servers.serveApp = function(app) {
+    servers.serveApp = function(app, opts) {
         return new Promise(function(resolve, reject) {
             if ("function" !== typeof app) {
                 reject(
@@ -100,9 +99,9 @@ Servers.create = function(greenlock) {
 
             var id = cluster.isWorker && cluster.worker.id;
             var idstr = (id && "#" + id + " ") || "";
-            var plainServer = servers.httpServer();
-            var plainAddr = "0.0.0.0";
-            var plainPort = 80;
+            var plainServer = servers.httpServer(null, opts.http);
+            var plainAddr = opts.plainAddr || "0.0.0.0";
+            var plainPort = opts.plainPort || 80;
             plainServer.listen(plainPort, plainAddr, function() {
                 console.info(
                     idstr + "Listening on",
@@ -112,9 +111,9 @@ Servers.create = function(greenlock) {
 
                 // TODO fetch greenlock.servername
                 _middlewareApp = app || _middlewareApp;
-                var secureServer = servers.httpsServer(null, app);
-                var secureAddr = "0.0.0.0";
-                var securePort = 443;
+                var secureServer = servers.httpsServer(null, app, opts.https);
+                var secureAddr = opts.secureAddr || "0.0.0.0";
+                var securePort = opts.securePort || 443;
                 secureServer.listen(securePort, secureAddr, function() {
                     console.info(idstr + "Listening on", secureAddr + ":" + securePort, "for secure traffic");
 
